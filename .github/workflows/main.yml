@@ -3,39 +3,57 @@ name: Fateh Messenger APK
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Get project
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
-
-      - name: Find Android project
+      - name: Extract project ZIP
         run: |
-          echo "Project files:"
-          find . -maxdepth 4 -type f | head -200
+          set -e
 
-          if [ -f "settings.gradle.kts" ] && [ -d "app" ]; then
-            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
-          elif [ -f "FatehMessenger/settings.gradle.kts" ] && [ -d "FatehMessenger/app" ]; then
-            echo "PROJECT_DIR=FatehMessenger" >> "$GITHUB_ENV"
-          else
-            echo "ERROR: Android project structure not found"
+          mkdir -p extracted
+
+          unzip -o FatehMessenger.zip -d extracted
+
+          echo "Extracted files:"
+          find extracted -maxdepth 5 -type f | head -200
+
+      - name: Locate Android project
+        run: |
+          set -e
+
+          SETTINGS=$(find extracted -type f \
+            \( -name settings.gradle -o -name settings.gradle.kts \) \
+            -print -quit)
+
+          if [ -z "$SETTINGS" ]; then
+            echo "ERROR: ZIP does not contain settings.gradle or settings.gradle.kts"
+            echo "Check whether the ZIP contains a real Android project."
             exit 1
           fi
+
+          PROJECT_DIR=$(dirname "$SETTINGS")
+          echo "Project found at: $PROJECT_DIR"
+
+          if [ ! -d "$PROJECT_DIR/app" ]; then
+            echo "ERROR: The Android app directory is missing."
+            find extracted -type d -name app
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Build APK
         run: |
@@ -46,5 +64,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: FatehMessenger-APK
-          path: "**/build/outputs/apk/debug/*.apk"
+          path: extracted/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
