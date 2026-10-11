@@ -1,0 +1,50 @@
+name: Fateh Messenger APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Get project
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Find Android project
+        run: |
+          echo "Project files:"
+          find . -maxdepth 4 -type f | head -200
+
+          if [ -f "settings.gradle.kts" ] && [ -d "app" ]; then
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          elif [ -f "FatehMessenger/settings.gradle.kts" ] && [ -d "FatehMessenger/app" ]; then
+            echo "PROJECT_DIR=FatehMessenger" >> "$GITHUB_ENV"
+          else
+            echo "ERROR: Android project structure not found"
+            exit 1
+          fi
+
+      - name: Build APK
+        run: |
+          cd "$PROJECT_DIR"
+          gradle assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: FatehMessenger-APK
+          path: "**/build/outputs/apk/debug/*.apk"
+          if-no-files-found: error
