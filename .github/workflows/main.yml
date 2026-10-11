@@ -42,12 +42,13 @@ jobs:
           echo "Project found at: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          # الحل الجذري: البحث عن جميع ملفات build.gradle وتعديل التوافق إلى الإصدار 17 اجبارياً
           echo "Fixing Java compatibility in build.gradle files..."
           find "$PROJECT_DIR" -name "build.gradle" -o -name "build.gradle.kts" | while read -r file; do
             sed -i 's/VERSION_1_8/VERSION_17/g' "$file"
             sed -i 's/1.8/17/g' "$file"
-          - name: Build APK
+          done
+
+      - name: Build APK
         run: |
           cd "$PROJECT_DIR"
           gradle assembleDebug -Dorg.gradle.java.home="$JAVA_HOME"
