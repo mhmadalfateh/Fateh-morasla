@@ -25,7 +25,7 @@ jobs:
           mkdir -p extracted
           unzip -o FatehMessenger.zip -d extracted
 
-      - name: Locate Android Project
+      - name: Locate Project
         run: |
           set -e
 
@@ -34,95 +34,105 @@ jobs:
             -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: settings.gradle not found inside ZIP"
+            echo "ERROR: Gradle settings file not found"
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
-          echo "Project found at: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Fix Java and Kotlin JVM Targets
+      - name: Force Java and Kotlin Target 17
         run: |
           set -e
 
-          APP_GRADLE=$(find "$PROJECT_DIR" -type f \
-            \( -path "*/app/build.gradle" -o -path "*/app/build.gradle.kts" \) \
-            -print -quit)
-
-          if [ -z "$APP_GRADLE" ]; then
-            echo "ERROR: app/build.gradle not found"
-            exit 1
-          fi
-
-          echo "Updating: $APP_GRADLE"
-
-          python3 - "$APP_GRADLE" <<'PY'
-          import pathlib
+          python3 - <<'PY'
+          from pathlib import Path
           import re
-          import sys
 
-          path = pathlib.Path(sys.argv[1])
-          text = path.read_text()
+          root = Path("extracted/FatehMessenger")
 
-          if path.name.endswith(".kts"):
-              java_version = "JavaVersion.VERSION_17"
-              kotlin_target = 'jvmTarget = "17"'
-          else:
-              java_version = "JavaVersion.VERSION_17"
-              kotlin_target = "jvmTarget = '17'"
+          files = list(root.rglob("build.gradle")) + list(root.rglob("build.gradle.kts"))
 
-          text = re.sub(
-              r'JavaVersion\.VERSION_1_8',
-              java_version,
-              text
-          )
+          for path in files:
+              text = path.read_text()
+              original = text
 
-          text = re.sub(
-              r'JavaVersion\.VERSION_17',
-              java_version,
-              text
-          )
-
-          text = re.sub(
-              r'(sourceCompatibility\s*=\s*)JavaVersion\.[A-Z0-9_]+',
-              r'\g<1>' + java_version,
-              text
-          )
-
-          text = re.sub(
-              r'(targetCompatibility\s*=\s*)JavaVersion\.[A-Z0-9_]+',
-              r'\g<1>' + java_version,
-              text
-          )
-
-          if re.search(r'jvmTarget\s*=', text):
               text = re.sub(
-                  r'jvmTarget\s*=\s*["\'][^"\']+["\']',
-                  kotlin_target,
+                  r'JavaVersion\.VERSION_1_8',
+                  'JavaVersion.VERSION_17',
                   text
               )
-          elif path.name.endswith(".kts"):
+
+              text = re.sub(
+                  r'(sourceCompatibility\s*=\s*)[^,\n]+',
+                  r'\1JavaVersion.VERSION_17',
+                  text
+              )
+
+              text = re.sub(
+                  r'(targetCompatibility\s*=\s*)[^,\n]+',
+                  r'\1JavaVersion.VERSION_17',
+                  text
+              )
+
+              text = re.sub(
+                  r'(jvmTarget\s*=\s*)["\'][^"\']+["\']',
+                  r'\1"17"',
+                  text
+              )
+
+              if text != original:
+                  path.write_text(text)
+                  print(f"Updated {path}")
+
+          app_files = [
+              p for p in files
+              if p.parent.name == "app"
+              and p.name in ("build.gradle", "build.gradle.kts")
+          ]
+
+          if not app_files:
+              raise SystemExit("ERROR: app Gradle file not found")
+
+          app = app_files[0]
+          text = app.read_text()
+
+          if "compileOptions" not in text:
               block = re.search(r'android\s*\{', text)
-              if block:
-                  pos = block.end()
-                  text = text[:pos] + '\n    kotlinOptions {\n        jvmTarget = "17"\n    }\n' + text[pos:]
-              else:
+              if not block:
                   raise SystemExit("ERROR: android block not found")
+              pos = block.end()
+              text = text[:pos] + '''
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+          ''' + text[pos:]
           else:
+              text = re.sub(
+                  r'compileOptions\s*\{.*?\}',
+                  '''compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }''',
+                  text,
+                  count=1,
+                  flags=re.S
+              )
+
+          if "kotlinOptions" not in text and app.name.endswith(".kts"):
               block = re.search(r'android\s*\{', text)
-              if block:
-                  pos = block.end()
-                  text = text[:pos] + "\n    kotlinOptions {\n        jvmTarget = '17'\n    }\n" + text[pos:]
-              else:
-                  raise SystemExit("ERROR: android block not found")
+              pos = block.end()
+              text = text[:pos] + '''
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          ''' + text[pos:]
 
-          path.write_text(text)
-          print("Java and Kotlin targets updated to 17")
+          app.write_text(text)
+          print("Final app Gradle configuration:")
+          print(text)
           PY
-
-          echo "Updated Gradle file:"
-          cat "$APP_GRADLE"
 
       - name: Build APK
         run: |
