@@ -1,4 +1,4 @@
-Name: FatehMessenger APK
+name: FatehMessenger APK
 
 on:
   workflow_dispatch:
