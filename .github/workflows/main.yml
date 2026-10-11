@@ -25,7 +25,7 @@ jobs:
           mkdir -p extracted
           unzip -o FatehMessenger.zip -d extracted
 
-      - name: Locate Android project and Fix Java Version
+      - name: Locate Android Project
         run: |
           set -e
 
@@ -34,7 +34,7 @@ jobs:
             -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: ZIP does not contain settings.gradle"
+            echo "ERROR: settings.gradle not found inside ZIP"
             exit 1
           fi
 
@@ -42,15 +42,91 @@ jobs:
           echo "Project found at: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          # البحث بدقة عن ملفات build.gradle أو build.gradle.kts وتعديل الإصدارات لتتوافق مع Java 17
-          find "$PROJECT_DIR" -name "build.gradle" -o -name "build.gradle.kts" | while read -r file; do
-            sed -i 's/ JavaVersion.VERSION_1_8 / JavaVersion.VERSION_17 /g' "$file"
-            sed -i 's/1.8/17/g' "$file"
-            sed -i 's/VERSION_1_8/VERSION_17/g' "$file"
-          done
+      - name: Fix Java and Kotlin JVM Targets
+        run: |
+          set -e
+
+          APP_GRADLE=$(find "$PROJECT_DIR" -type f \
+            \( -path "*/app/build.gradle" -o -path "*/app/build.gradle.kts" \) \
+            -print -quit)
+
+          if [ -z "$APP_GRADLE" ]; then
+            echo "ERROR: app/build.gradle not found"
+            exit 1
+          fi
+
+          echo "Updating: $APP_GRADLE"
+
+          python3 - "$APP_GRADLE" <<'PY'
+          import pathlib
+          import re
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text()
+
+          if path.name.endswith(".kts"):
+              java_version = "JavaVersion.VERSION_17"
+              kotlin_target = 'jvmTarget = "17"'
+          else:
+              java_version = "JavaVersion.VERSION_17"
+              kotlin_target = "jvmTarget = '17'"
+
+          text = re.sub(
+              r'JavaVersion\.VERSION_1_8',
+              java_version,
+              text
+          )
+
+          text = re.sub(
+              r'JavaVersion\.VERSION_17',
+              java_version,
+              text
+          )
+
+          text = re.sub(
+              r'(sourceCompatibility\s*=\s*)JavaVersion\.[A-Z0-9_]+',
+              r'\g<1>' + java_version,
+              text
+          )
+
+          text = re.sub(
+              r'(targetCompatibility\s*=\s*)JavaVersion\.[A-Z0-9_]+',
+              r'\g<1>' + java_version,
+              text
+          )
+
+          if re.search(r'jvmTarget\s*=', text):
+              text = re.sub(
+                  r'jvmTarget\s*=\s*["\'][^"\']+["\']',
+                  kotlin_target,
+                  text
+              )
+          elif path.name.endswith(".kts"):
+              block = re.search(r'android\s*\{', text)
+              if block:
+                  pos = block.end()
+                  text = text[:pos] + '\n    kotlinOptions {\n        jvmTarget = "17"\n    }\n' + text[pos:]
+              else:
+                  raise SystemExit("ERROR: android block not found")
+          else:
+              block = re.search(r'android\s*\{', text)
+              if block:
+                  pos = block.end()
+                  text = text[:pos] + "\n    kotlinOptions {\n        jvmTarget = '17'\n    }\n" + text[pos:]
+              else:
+                  raise SystemExit("ERROR: android block not found")
+
+          path.write_text(text)
+          print("Java and Kotlin targets updated to 17")
+          PY
+
+          echo "Updated Gradle file:"
+          cat "$APP_GRADLE"
 
       - name: Build APK
         run: |
+          set -e
           cd "$PROJECT_DIR"
           gradle assembleDebug -Dorg.gradle.java.home="$JAVA_HOME"
 
