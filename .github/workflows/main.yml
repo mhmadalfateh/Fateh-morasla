@@ -58,8 +58,7 @@ jobs:
       - name: Build APK
         run: |
           cd "$PROJECT_DIR"
-          # التأكد من استخدام Java 17 وتمرير معاملات التوافق لتجنب خطأ الـ JVM-target
-          ./gradlew assembleDebug -Dorg.gradle.java.home="$JAVA_HOME"
+          gradle assembleDebug -Dorg.gradle.java.home="$JAVA_HOME"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
