@@ -22,15 +22,10 @@ jobs:
       - name: Extract project ZIP
         run: |
           set -e
-
           mkdir -p extracted
-
           unzip -o FatehMessenger.zip -d extracted
 
-          echo "Extracted files:"
-          find extracted -maxdepth 5 -type f | head -200
-
-      - name: Locate Android project
+      - name: Locate Android project and Fix Java Version
         run: |
           set -e
 
@@ -39,23 +34,20 @@ jobs:
             -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: ZIP does not contain settings.gradle or settings.gradle.kts"
-            echo "Check whether the ZIP contains a real Android project."
+            echo "ERROR: ZIP does not contain settings.gradle"
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
           echo "Project found at: $PROJECT_DIR"
-
-          if [ ! -d "$PROJECT_DIR/app" ]; then
-            echo "ERROR: The Android app directory is missing."
-            find extracted -type d -name app
-            exit 1
-          fi
-
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-      - name: Build APK
+          # الحل الجذري: البحث عن جميع ملفات build.gradle وتعديل التوافق إلى الإصدار 17 اجبارياً
+          echo "Fixing Java compatibility in build.gradle files..."
+          find "$PROJECT_DIR" -name "build.gradle" -o -name "build.gradle.kts" | while read -r file; do
+            sed -i 's/VERSION_1_8/VERSION_17/g' "$file"
+            sed -i 's/1.8/17/g' "$file"
+          - name: Build APK
         run: |
           cd "$PROJECT_DIR"
           gradle assembleDebug -Dorg.gradle.java.home="$JAVA_HOME"
