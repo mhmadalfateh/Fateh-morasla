@@ -25,7 +25,7 @@ jobs:
           mkdir -p extracted
           unzip -o FatehMessenger.zip -d extracted
 
-      - name: Locate Android project and Force Java 17
+      - name: Locate Android project and Fix Java Version in .kts or .gradle
         run: |
           set -e
 
@@ -42,22 +42,15 @@ jobs:
           echo "Project found at: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          # البحث عن ملف build.gradle الخاص بالـ app وحقن إعدادات التوافق بداخله مباشرة
-          APP_BUILD_GRADLE=$(find "$PROJECT_DIR" -path "*/app/build.gradle" -o -path "*/app/build.gradle.kts" | head -n 1)
-          
-          if [ -f "$APP_BUILD_GRADLE" ]; then
-            echo "Injecting Java 17 compatibility into $APP_BUILD_GRADLE"
-            echo "" >> "$APP_BUILD_GRADLE"
-            echo "android {" >> "$APP_BUILD_GRADLE"
-            echo "    compileOptions {" >> "$APP_BUILD_GRADLE"
-            echo "        sourceCompatibility JavaVersion.VERSION_17" >> "$APP_BUILD_GRADLE"
-            echo "        targetCompatibility JavaVersion.VERSION_17" >> "$APP_BUILD_GRADLE"
-            echo "    }" >> "$APP_BUILD_GRADLE"
-            echo "    kotlinOptions {" >> "$APP_BUILD_GRADLE"
-            echo "        jvmTarget = '17'" >> "$APP_BUILD_GRADLE"
-            echo "    }" >> "$APP_BUILD_GRADLE"
-            echo "}" >> "$APP_BUILD_GRADLE"
-          fi
+          # استبدال أي إصدار قديم 1.8 أو VERSION_1_8 إلى 17 في جميع ملفات البناء تلقائياً
+          echo "Replacing Java 1.8 with Java 17 in build files..."
+          find "$PROJECT_DIR" -name "build.gradle" -o -name "build.gradle.kts" | while read -r file; do
+            sed -i 's/VERSION_1_8/VERSION_17/g' "$file"
+            sed -i 's/"1.8"/"17"/g' "$file"
+            sed -i "s/'1.8'/'17'/g" "$file"
+            sed -i 's/jvmTarget = "1.8"/jvmTarget = "17"/g' "$file"
+            sed -i "s/jvmTarget = '1.8'/jvmTarget = '17'/g" "$file"
+          done
 
       - name: Build APK
         run: |
