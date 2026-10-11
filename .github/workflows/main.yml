@@ -1,4 +1,4 @@
-name: Fateh Messenger APK
+Name: FatehMessenger APK
 
 on:
   workflow_dispatch:
@@ -58,7 +58,8 @@ jobs:
       - name: Build APK
         run: |
           cd "$PROJECT_DIR"
-          gradle assembleDebug
+          # التأكد من استخدام Java 17 وتمرير معاملات التوافق لتجنب خطأ الـ JVM-target
+          ./gradlew assembleDebug -Dorg.gradle.java.home="$JAVA_HOME"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
