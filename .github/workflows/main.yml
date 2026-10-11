@@ -42,8 +42,9 @@ jobs:
           echo "Project found at: $PROJECT_DIR"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          # تعديل أرقام الإصدارات مباشرة داخل ملفات البناء بأمر آمن وبسيط
-          find "$PROJECT_DIR" -name "build.gradle*" | while read -r file; do
+          # البحث بدقة عن ملفات build.gradle أو build.gradle.kts وتعديل الإصدارات لتتوافق مع Java 17
+          find "$PROJECT_DIR" -name "build.gradle" -o -name "build.gradle.kts" | while read -r file; do
+            sed -i 's/ JavaVersion.VERSION_1_8 / JavaVersion.VERSION_17 /g' "$file"
             sed -i 's/1.8/17/g' "$file"
             sed -i 's/VERSION_1_8/VERSION_17/g' "$file"
           done
